@@ -8,6 +8,10 @@ import time
 import re
 import lxml
 import json
+import Tkinter as tk
+import tkFont
+import ttk
+from   lbox import *
 from   lxml import etree
 from   Tkinter import *
 
@@ -55,7 +59,18 @@ def searchYT(terms,limit=50):
       if not results.__contains__(i):
         results.append(i)
     page+=1
-  return results
+  x=[]
+  for i in results:
+    try:
+      z={}
+      title,dur=getYT(i)
+      z["title"]=str(title)
+      z["length"]=dur
+      z['url']=str(i)
+      x.append(z)
+    except UnicodeEncodeError:
+      pass
+  return x
 
 def fetchYT(ident,path=os.getcwd()):
   v=pafy.new("http://www.youtube.com/watch?v="+ident)
@@ -67,6 +82,9 @@ def fetchYT(ident,path=os.getcwd()):
   print "Done"
 
 def getYT(ident):
+  youtube = etree.HTML(u.urlopen("http://www.youtube.com/watch?v=KQEOBZLx-Z8").read())
+  video_title = youtube.xpath("//span[@id='eow-title']/@title")
+  title=''.join(video_title)
   api_key='AIzaSyCf-aoW-PqU_4XcldbFv1WrwtCFtc95QnY'
   searchUrl="https://www.googleapis.com/youtube/v3/videos?id="+ident+"&key="+api_key+"&part=contentDetails"
   response = u.urlopen(searchUrl).read()
@@ -88,4 +106,18 @@ def getYT(ident):
       h="0"
       m="0"
       s=dur.strip("S")
-  print "%d:%02d:%02d" % (int(h),int(m),int(s))
+  return title,"%d:%02d:%02d"%(int(h),int(m),int(s))
+
+w=Tk()
+w.title("Muzez Client")
+lf=LabelFrame(w)
+search=Entry(lf)
+search.config(width=50)
+search.grid(row=1,column=1)
+submit=Button(lf,text="Search").grid(row=1,column=2)
+lbox=MultiListbox(lf,(("Title",47),("Duration",10)))
+lbox.grid(row=2,column=1,columnspan=2)
+for i in [("Hello","World"),("World","Hello")]:
+  lbox.insert(END,i)
+lf.grid(row=1,column=1)
+w.mainloop()
