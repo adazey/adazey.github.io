@@ -15,6 +15,7 @@ from   lbox import *
 from   lxml import etree
 from   Tkinter import *
 
+mbl='goo.gl/Wp1yiD'
 cid="50aaa3de7469fde7c1e5e6ad7c91275c"
 client=sc.Client(client_id=cid)
 
@@ -92,32 +93,48 @@ def getYT(ident):
   all_data=data['items']
   contentDetails=all_data[0]['contentDetails']
   duration=contentDetails['duration']
+  print duration
   dur=duration.strip("PT")
+  print ident
   try:
     h,m=dur.split("H")
     m,s=m.split("M")
     s=s.strip("S")
   except ValueError:
     try:
-      h="0"
+      h=0
       m,s=dur.split("M")
       s=s.strip("S")
     except ValueError:
-      h="0"
-      m="0"
+      h=0
+      m=0
       s=dur.strip("S")
+  if h=='':h=0
+  if m=='':m=0
+  if s=='':s=0
   return title,"%d:%02d:%02d"%(int(h),int(m),int(s))
 
+def doSearch(event):
+  global urls
+  query=event.widget.get()
+  searches=searchYT(query)
+  searches.append(searchSC(query))
+  for i in searches:
+    lbox.insert(END,(i['title'],i['length']))
+    urls.append(i['url'])
+  return urls
+
+urls=[]
 w=Tk()
 w.title("Muzez Client")
 lf=LabelFrame(w)
 search=Entry(lf)
 search.config(width=50)
+search.focus()
 search.grid(row=1,column=1)
+search.bind("<Return>",func=doSearch)
 submit=Button(lf,text="Search").grid(row=1,column=2)
 lbox=MultiListbox(lf,(("Title",47),("Duration",10)))
 lbox.grid(row=2,column=1,columnspan=2)
-for i in [("Hello","World"),("World","Hello")]:
-  lbox.insert(END,i)
 lf.grid(row=1,column=1)
 w.mainloop()
