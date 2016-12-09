@@ -1,29 +1,26 @@
+import sys
+sys.path.append("./libs/")
 import urllib as u
 import youtube_dl
 import pafy
-import sys
 import soundcloud as sc
 import os
-import time
 import re
-import lxml
 import json
-import Tkinter as tk
-import tkFont
-import ttk
-from   lbox import *
-from   lxml import etree
+import TkTreectrl as treectrl
+import tkFileDialog
+import thread
+from   tabs import *
+from   vlc import MediaPlayer
+from   HTMLParser import HTMLParser
 from   Tkinter import *
 
 mbl='goo.gl/Wp1yiD'
 cid="50aaa3de7469fde7c1e5e6ad7c91275c"
 client=sc.Client(client_id=cid)
+parser=HTMLParser()
 
-class Search():
-  def __init__(self,search_queary,limits):
-    pass
-
-def searchSC(terms,limit=50):
+def searchSC(terms,limit=30):
   tracks=client.get('/tracks',q=terms,filter="public",limit=limit)
   x=[]
   for i in tracks:
@@ -49,92 +46,143 @@ def fetchSC(url,path=os.getcwd()):
   f.close()
   print "Done"
 
-def searchYT(terms,limit=50):
+def searchYT(terms,limit=30):
   results=[]
   page=1
+  x=[]
   while len(results)<=limit:
     query_string = u.urlencode({"search_query" : terms,"page" : page})
-    html_content = u.urlopen("http://www.youtube.com/results?" + query_string)
-    search_results = re.findall(r'href=\"\/watch\?v=(.{11})', html_content.read())
+    html = u.urlopen("http://www.youtube.com/results?" + query_string).read()
+    search_results = re.findall(r'href\=\"\/watch\?v\=(.{11})',html)
     for i in search_results:
       if not results.__contains__(i):
-        results.append(i)
+        try:
+          results.append(i)
+          html=html.split('<h3 class="yt-lockup-title "><a href="/watch?v=',1)[1]
+          url,html=html.split('" ',1)
+          html=html.split('"  title="',1)[1]
+          title,html=html.split('" ',1)
+          html=html.split('Duration: ',1)[1]
+          dur,html=html.split('.<',1)
+          dur=dur.split(":")
+          if len(dur)!=3:
+            dur=[0,int(dur[0]),int(dur[1])]
+          else:
+            z=[]
+            for i in dur:
+              z.append(int(i))
+            dur=z
+          h,m,s=dur
+          title=str(parser.unescape(title))
+          x.append({'title':title,'length':"%d:%02d:%02d"%(h,m,s),'url':url})
+        except:
+          pass
     page+=1
-  x=[]
-  for i in results:
-    try:
-      z={}
-      title,dur=getYT(i)
-      z["title"]=str(title)
-      z["length"]=dur
-      z['url']=str(i)
-      x.append(z)
-    except UnicodeEncodeError:
-      pass
   return x
 
 def fetchYT(ident,path=os.getcwd()):
-  v=pafy.new("http://www.youtube.com/watch?v="+ident)
+  try:
+    v=pafy.new("http://www.youtube.com/watch?v="+ident)
+  except:
+    v=pafy.new("http://www.youtube.com/watch?v="+ident)
   audio=v.getbestaudio()
   audio.download(path,True)
   if str(audio).find("mp3")==-1:
-    os.system("./ffmpeg/ffmpegLinArmhf -i '%s' -codec:a libmp3lame -qscale:a 2 %s.mp3"%(
+    os.system("ffmpeg -i '%s' -codec:a libmp3lame -qscale:a 2 '%s.mp3'"%(
       path+"/"+str(v.title)+"."+str(audio).split(":",1)[1].split("@",1)[0],path+"/"+str(v.title)))
+    os.system('rm "%s"'%(path+"/"+str(v.title)+"."+str(audio).split(":",1)[1].split("@",1)[0]))
   print "Done"
 
-def getYT(ident):
-  youtube = etree.HTML(u.urlopen("http://www.youtube.com/watch?v=KQEOBZLx-Z8").read())
-  video_title = youtube.xpath("//span[@id='eow-title']/@title")
-  title=''.join(video_title)
-  api_key='AIzaSyCf-aoW-PqU_4XcldbFv1WrwtCFtc95QnY'
-  searchUrl="https://www.googleapis.com/youtube/v3/videos?id="+ident+"&key="+api_key+"&part=contentDetails"
-  response = u.urlopen(searchUrl).read()
-  data = json.loads(response)
-  all_data=data['items']
-  contentDetails=all_data[0]['contentDetails']
-  duration=contentDetails['duration']
-  print duration
-  dur=duration.strip("PT")
-  print ident
-  try:
-    h,m=dur.split("H")
-    m,s=m.split("M")
-    s=s.strip("S")
-  except ValueError:
-    try:
-      h=0
-      m,s=dur.split("M")
-      s=s.strip("S")
-    except ValueError:
-      h=0
-      m=0
-      s=dur.strip("S")
-  if h=='':h=0
-  if m=='':m=0
-  if s=='':s=0
-  return title,"%d:%02d:%02d"%(int(h),int(m),int(s))
-
-def doSearch(event):
+def doSearch(event,query=None):
   global urls
-  query=event.widget.get()
-  searches=searchYT(query)
-  searches.append(searchSC(query))
-  for i in searches:
-    lbox.insert(END,(i['title'],i['length']))
-    urls.append(i['url'])
-  return urls
+  urls=[]
+  if event!=None:
+    query=event.widget.get()
+  if query!='':
+    searches=searchYT(query)+searchSC(query)
+    lbox.delete(0,END)
+    for i in searches:
+      lbox.insert(END,i['title'],i['length'])
+      urls.append(i['url'])
+    return urls
+
+def playAudio(url):
+  global mp,oldUrl
+  if url==oldUrl:
+    mp.play()
+  else:
+    if len(url)==11:
+      try:
+        mp.stop()
+      except:
+        pass
+      try:
+        v=pafy.new(url)
+        v=v.getbestaudio()
+        mp=MediaPlayer(v.url)
+        mp.play()
+      except:
+        v=pafy.new(url)
+        v=v.getbestaudio()
+        mp=MediaPlayer(v.url)
+        mp.play()
+    else:
+      track = client.get('tracks/%s'%(client.get('/resolve', url=url).id))
+      stream_url = client.get(track.stream_url, allow_redirects=False)
+      try:
+        mp.stop()
+      except:
+        pass
+      mp=MediaPlayer(str(stream_url.location))
+      mp.play()
+    oldUrl=url
+
+def pauseAudio():
+  global mp
+  mp.pause()
+
+def doDL(url):
+  if len(url)==11:
+    thread.start_new_thread(fetchYT,(url,))
+  else:
+    thread.start_new_thread(fetchSC,(url,))
+
+def setDLPath():
+  global dlpath
+  dlpath=tkFileDialog.askdirectory()
+  os.chdir(dlpath)
+  savepath.config(text="Save Path:    "+dlpath)
 
 urls=[]
 w=Tk()
+oldUrl=''
+main=LabelFrame(w)
+PLAY=PhotoImage(master=w,file='img/playButton.gif')
+PAUSE=PhotoImage(master=w,file='img/pauseButton.gif')
+DOWNLOAD=PhotoImage(master=w,file='img/downloadButton.gif')
 w.title("Muzez Client")
-lf=LabelFrame(w)
-search=Entry(lf)
-search.config(width=50)
+w.geometry("808x665")
+lbox=treectrl.MultiListbox(main)
+search=Entry(main)
+search.config(width=75)
 search.focus()
 search.grid(row=1,column=1)
 search.bind("<Return>",func=doSearch)
-submit=Button(lf,text="Search").grid(row=1,column=2)
-lbox=MultiListbox(lf,(("Title",47),("Duration",10)))
-lbox.grid(row=2,column=1,columnspan=2)
-lf.grid(row=1,column=1)
+pb=Button(main,command=lambda:playAudio(urls[lbox.selection_get()[0]-1]))
+pb.config(image=PLAY,width=23,height=23)
+pb.grid(row=1,column=3)
+pbt=Button(main,command=lambda:pauseAudio())
+pbt.config(image=PAUSE,width=23,height=23)
+pbt.grid(row=1,column=4)
+db=Button(main,command=lambda:w.after(1,doDL(urls[lbox.selection_get()[0]-1])))
+db.config(image=DOWNLOAD,width=23,height=23)
+db.grid(row=1,column=5)
+lbox.config(columns=('Title','Duration'),width=800,height=600)
+lbox.grid(row=3,column=1,columnspan=5,sticky='nesw')
+
+submit=Button(main,text="Search",command=doSearch(None,query=search.get())).grid(row=1,column=2)
+savepath=Label(main,text="Save Path:    "+os.getcwd())
+savepath.grid(row=2,column=1,columnspan=1)
+Button(main,text='Browse', command=setDLPath).grid(row=2,column=2,columnspan=1)
+main.grid(row=1,column=1)
 w.mainloop()
